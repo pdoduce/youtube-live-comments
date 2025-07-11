@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 
 type Comment = {
@@ -11,13 +11,12 @@ type Comment = {
 }
 
 const apiKey = process.env.NEXT_PUBLIC_YT_API_KEY!
-const scrollSpeed = parseInt(process.env.NEXT_PUBLIC_SCROLL_SPEED_MS || '30000') // default 30s
+const scrollSpeed = parseInt(process.env.NEXT_PUBLIC_SCROLL_SPEED_MS || '30000') // Default to 30s
 
 export default function LivePage() {
   const [comments, setComments] = useState<Comment[]>([])
   const [videoId, setVideoId] = useState<string | null>(null)
   const [liveChatId, setLiveChatId] = useState<string | null>(null)
-  const [scrollKey, setScrollKey] = useState<number>(0) // used to reset animation
   const lastFetchedIdsRef = useRef<Set<string>>(new Set())
 
   // Load videoId from localStorage or fallback
@@ -49,28 +48,28 @@ export default function LivePage() {
   // Poll for comments every 5 seconds
   useEffect(() => {
     if (!liveChatId) return
+
     const fetchMessages = async () => {
       try {
         const res = await fetch(
           `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${liveChatId}&part=snippet,authorDetails&key=${apiKey}`
         )
         const data = await res.json()
-        const newComments = data.items.map((item: any) => ({
+        const newComments: Comment[] = data.items.map((item: any): Comment => ({
           id: item.id,
           name: item.authorDetails.displayName,
           photo: item.authorDetails.profileImageUrl,
           message: item.snippet.displayMessage,
         }))
 
-        const unique = newComments.filter(n => !lastFetchedIdsRef.current.has(n.id))
+        const unique = newComments.filter((n: Comment) => !lastFetchedIdsRef.current.has(n.id))
 
         if (unique.length > 0) {
-          unique.forEach(c => lastFetchedIdsRef.current.add(c.id))
-          setComments(prev => {
-            const merged = [...prev.slice(-50), ...unique]
-            return merged
-          })
-          setScrollKey(prev => prev + 1) // force reset animation
+          unique.forEach((c: Comment) => lastFetchedIdsRef.current.add(c.id))
+          setComments((prev) => [...prev.slice(-50), ...unique])
+        } else if (comments.length > 0) {
+          // If no new comments, repeat previous comments
+          setComments((prev) => [...prev])
         }
       } catch (err) {
         console.error('Failed to fetch messages:', err)
@@ -80,7 +79,7 @@ export default function LivePage() {
     const interval = setInterval(fetchMessages, 5000)
     fetchMessages() // initial call
     return () => clearInterval(interval)
-  }, [liveChatId])
+  }, [liveChatId, comments])
 
   if (!videoId) {
     return (
@@ -90,23 +89,19 @@ export default function LivePage() {
     )
   }
 
-  // Double the comment list to prevent scroll gap
-  const duplicatedComments = [...comments, ...comments]
-
   return (
     <div className="w-full h-screen bg-gradient-to-br from-black to-gray-900 text-white overflow-hidden flex items-center justify-center p-4">
       <div className="w-[1280px] h-full overflow-hidden relative">
         <div
-          key={scrollKey} // resets animation when updated
           className="absolute w-full"
           style={{
             animation: `scrollUp ${scrollSpeed}ms linear infinite`,
           }}
         >
           <div className="space-y-4 px-4 py-10">
-            {duplicatedComments.map(comment => (
+            {comments.map((comment: Comment) => (
               <div
-                key={`${comment.id}-${Math.random()}`} // ensure unique keys across duplicates
+                key={comment.id}
                 className="flex items-start space-x-4 p-4 bg-white/10 rounded-lg shadow-md"
               >
                 <Image
@@ -130,10 +125,10 @@ export default function LivePage() {
       <style jsx global>{`
         @keyframes scrollUp {
           0% {
-            transform: translateY(0%);
+            transform: translateY(100%);
           }
           100% {
-            transform: translateY(-50%);
+            transform: translateY(-100%);
           }
         }
       `}</style>
