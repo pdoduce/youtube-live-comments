@@ -18,6 +18,7 @@ export default function LivePage() {
   const [videoId, setVideoId] = useState<string | null>(null)
   const [liveChatId, setLiveChatId] = useState<string | null>(null)
   const lastFetchedIdsRef = useRef<Set<string>>(new Set())
+  const animationKeyRef = useRef<number>(0) // Used to force animation restart
 
   // Load videoId from localStorage or fallback
   useEffect(() => {
@@ -25,7 +26,7 @@ export default function LivePage() {
     setVideoId(id)
   }, [])
 
-  // Fetch liveChatId when videoId is available
+  // Fetch liveChatId
   useEffect(() => {
     if (!videoId) return
 
@@ -45,7 +46,7 @@ export default function LivePage() {
     fetchLiveChatId()
   }, [videoId])
 
-  // Poll for comments every 5 seconds
+  // Fetch messages and handle comment updates
   useEffect(() => {
     if (!liveChatId) return
 
@@ -55,6 +56,7 @@ export default function LivePage() {
           `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${liveChatId}&part=snippet,authorDetails&key=${apiKey}`
         )
         const data = await res.json()
+
         const newComments: Comment[] = data.items.map((item: any): Comment => ({
           id: item.id,
           name: item.authorDetails.displayName,
@@ -66,10 +68,18 @@ export default function LivePage() {
 
         if (unique.length > 0) {
           unique.forEach((c: Comment) => lastFetchedIdsRef.current.add(c.id))
-          setComments((prev) => [...prev.slice(-50), ...unique])
+          setComments((prev) => {
+            const updated = [...prev.slice(-50), ...unique]
+            animationKeyRef.current++ // Restart animation
+            return updated
+          })
         } else if (comments.length > 0) {
-          // If no new comments, repeat previous comments
-          setComments((prev) => [...prev])
+          // If no new comments, duplicate current comments for seamless scroll
+          setComments((prev) => {
+            const repeated = [...prev.slice(-50), ...prev.slice(-50)]
+            animationKeyRef.current++
+            return repeated
+          })
         }
       } catch (err) {
         console.error('Failed to fetch messages:', err)
@@ -77,7 +87,7 @@ export default function LivePage() {
     }
 
     const interval = setInterval(fetchMessages, 5000)
-    fetchMessages() // initial call
+    fetchMessages()
     return () => clearInterval(interval)
   }, [liveChatId, comments])
 
@@ -93,15 +103,16 @@ export default function LivePage() {
     <div className="w-full h-screen bg-gradient-to-br from-black to-gray-900 text-white overflow-hidden flex items-center justify-center p-4">
       <div className="w-[1280px] h-full overflow-hidden relative">
         <div
+          key={animationKeyRef.current} // restart animation on key change
           className="absolute w-full"
           style={{
             animation: `scrollUp ${scrollSpeed}ms linear infinite`,
           }}
         >
           <div className="space-y-4 px-4 py-10">
-            {comments.map((comment: Comment) => (
+            {comments.map((comment: Comment, idx: number) => (
               <div
-                key={comment.id}
+                key={`${comment.id}-${idx}`} // prevent React key conflict on duplicates
                 className="flex items-start space-x-4 p-4 bg-white/10 rounded-lg shadow-md"
               >
                 <Image
@@ -121,7 +132,6 @@ export default function LivePage() {
         </div>
       </div>
 
-      {/* Keyframe animation */}
       <style jsx global>{`
         @keyframes scrollUp {
           0% {
